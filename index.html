@@ -1,0 +1,2468 @@
+<!DOCTYPE html>
+<html lang="UTF-8">
+<meta charset="UTF-8">
+<head>
+  <script src="js/jquery.js" type="text/javascript"></script>
+    <script src="js/mqttws31.js" type="text/javascript"></script>
+  <script src="js/config.js" type="text/javascript"></script>
+  <link rel="stylesheet" type="text/css" href="bootstrap.min.css">
+  <!-- <link rel="bootstrap.min.css"> -->
+  <script type="text/javascript" src="http://underscorejs.org/underscore.js"></script>
+  <script src="bootstrap.min.js"></script>
+
+<link rel="stylesheet" href="export.css" type="text/css" media="all" />
+
+<link rel="stylesheet" href="css/nat.css?2323" type="text/css" media="all" />
+  <script type="text/javascript">
+   var graphDataSeries = [];
+   var mqtt;
+    var reconnectTimeout = 2000;
+	var encoderB=0;
+	var encoderA = 0;
+	var encoderB_b=0;
+	var SWB_E=1,SWB_2=1,SWB_3=1,SWB_4=1,SWA_E=1;
+	var mode=0;
+	var type_1=0;
+	var timebot=0;
+  var num_pox=0;
+  var MAXnum_pox=10;
+  var num_poy=0;
+  var MAXnum_poy=0;
+  var natGlobal = { labels: [] }
+
+	//////////////////////////DIODE
+	var set_var=0,AMAX_DIODE=0;
+	///////////////////////////BJT
+
+	///////////////////////////FET
+
+    function MQTTconnect() {
+	if (typeof path == "undefined") {
+		path = '/mqtt';
+	}
+	mqtt = new Paho.MQTT.Client(
+			host,
+			port,
+			path,
+			"web_" + parseInt(Math.random() * 100, 10)
+	);
+        var options = {
+            timeout: 3,
+            useSSL: useTLS,
+            cleanSession: cleansession,
+            onSuccess: onConnect,
+            onFailure: function (message) {
+                $('#status').val("Connection failed: " + message.errorMessage + "Retrying");
+                setTimeout(MQTTconnect, reconnectTimeout);
+            }
+        };
+
+        mqtt.onConnectionLost = onConnectionLost;
+        mqtt.onMessageArrived = onMessageArrived;
+
+        if (username != null) {
+            options.userName = username;
+            options.password = password;
+        }
+        console.log("Host="+ host + ", port=" + port + ", path=" + path + " TLS = " + useTLS + " username=" + username + " password=" + password);
+        mqtt.connect(options);
+    }
+		window.natGraph =  { }
+    function onConnect() {
+        //$('#status').val('Connected to ' + host + ':' + port + path);
+        // Connection succeeded; subscribe to our topic
+        mqtt.subscribe(topic,{qos: 0});
+
+
+        //$('#topic').val(topic);
+    }
+
+    function onConnectionLost(response) {
+        setTimeout(MQTTconnect, reconnectTimeout);
+       // $('#status').val("connection lost: " + responseObject.errorMessage + ". Reconnecting");
+
+    };
+
+    function onMessageArrived(message) {
+
+        var topic = message.destinationName;
+        var payload = message.payloadString;
+
+		if(topic == "BT"){
+     var myObj = JSON.parse(payload);
+			if(myObj.SWB_E != undefined )
+			SWB_E = myObj.SWB_E;
+			if(myObj.SWB_2 != undefined )
+			SWB_2 = myObj.SWB_2;
+			if(myObj.SWB_3 != undefined )
+			SWB_3 = myObj.SWB_3;
+			if(myObj.SWB_4 != undefined )
+			SWB_4 = myObj.SWB_4;
+			if(myObj.SWA_E != undefined )
+			SWA_E = myObj.SWA_E
+			if(myObj.encoderB != undefined ){
+				encoderB = -myObj.encoderB;
+				encoderB_b = encoderB_b+encoderB;
+				if(encoderB_b>9)encoderB_b=9;
+				if(encoderB_b<0)encoderB_b=0;
+			}
+			if(myObj.encoderA != undefined ){
+				encoderA = -myObj.encoderA;
+
+
+			}
+			//console.log(encoderA,mode,set_var,SWB_E,SWB_2,SWB_3,SWA_E,timebot);
+
+		}
+
+	   //console.log(topic)
+		if (topic == "tong") {
+      console.log('tong')
+      //console.log(typeof payload, payload, topic)
+      console.log(payload)
+			payload = JSON.parse(payload);
+      _payload = {data: [] }
+      var tmp = []
+      _(payload.data).forEach(function(v) {
+        if (v) {
+          tmp.push(v)
+        }
+      })
+      _payload.data = tmp
+      console.log('ok')
+      console.log(natGlobal)
+			var _data = _(_payload.data).map(function(obj) {
+        natGlobal[obj[0]] = (obj[0]/1000.0)
+        return {x: obj[0], y: obj[1]}
+      });
+
+			if (payload.type === 0) {
+				console.log('type in 0');
+				graphDataSeries = []
+				graphDataSeries[0] = { name: "Graph0: ", data: _data }
+				_(natGraph).forEach(function(v, k) {
+					graphDataSeries.push(v) ;
+				})
+        // console.log(natGlobal._labels)
+        delete natGlobal.labels
+				chart.update({ series: graphDataSeries, labels: _.keys(natGlobal) })
+				console.log(graphDataSeries)
+        $(".pro1").html("พร้อมทำงาน");
+				natGraph  = {}
+        natGlobal = { labels: [] }
+			}
+			else {
+				natGraph["type"+payload.type] = { name: "Graph: "+payload.type, data: _data }
+
+			}
+		}
+    };
+
+
+    $(document).ready(function() {
+        MQTTconnect();
+    });
+function BJT() {
+    $(document).ready(function(){
+    $(".BJT").show();
+	$(".DIODE").hide();
+	$(".FET").hide();
+
+});
+}
+setInterval(function(){
+	if(mode == 0){
+		$(".DIODE_M").css("background-color", "#fff");
+		$(".FET_M").css("background-color", "#fff");
+		$(".BJT_M").css("background-color", "#fff");
+    //encoderB_b = 3;
+	if((encoderB_b/3)==0) {type_1 = 1;DIODE();$('.type_n input').eq(0).click();}
+	if((encoderB_b/3)==1) {type_1 = 2;BJT();$('.type_n input').eq(1).click();}
+	if((encoderB_b/3)==2) {type_1 = 3;FET();$('.type_n input').eq(2).click();}
+	if(SWB_E == 0) {
+		if(type_1==1){
+		$(".DIODE_M").css("background-color", "yellow");
+		$(".FET_M").css("background-color", "#fff");
+		$(".BJT_M").css("background-color", "#fff");
+		mode = 1;
+		}else if(type_1==2){
+		$(".DIODE_M").css("background-color", "#fff");
+		$(".FET_M").css("background-color", "#fff");
+		$(".BJT_M").css("background-color", "yellow");
+		mode = 2;
+		}else if(type_1==3){
+		$(".DIODE_M").css("background-color", "#fff");
+		$(".FET_M").css("background-color", "yellow");
+		$(".BJT_M").css("background-color", "#fff");
+		mode = 3;
+		}
+
+	}
+  if(SWA_E == 0) {
+    $(".pro1").html("กำลังใช้ตัวชี้");
+    mode = 4;
+  }
+	}
+	else if(mode==1){    //ไดโอด
+		if(SWB_3 == 0){
+		set_var=set_var-1;
+		}
+		if(SWB_2 == 0){
+		set_var=set_var+1;
+		}
+
+		if(set_var>3)set_var=3;
+		if(set_var<0)set_var=0;
+		if(set_var==0){
+		$(".DIODE .AMAX").css("background-color", "yellow");
+		$(".DIODE .VMIN").css("background-color", "#fff");
+		$(".DIODE .VMAX").css("background-color", "#fff");
+		$(".DIODE .VAK").css("background-color", "#fff");
+		if(encoderB == 1){
+		var num_AMAX = parseFloat($(".DIODE .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.1;
+		if(num_AMAX>1) num_AMAX=1;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".DIODE .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_AMAX = parseFloat($(".DIODE .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.1;
+		if(num_AMAX>1) num_AMAX=1;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".DIODE .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_AMAX = parseFloat($(".DIODE .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.001;
+		if(num_AMAX>1) num_AMAX=1;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".DIODE .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderA == -1){		var num_AMAX = parseFloat($(".DIODE .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.001;
+		if(num_AMAX>1) num_AMAX=1;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".DIODE .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		}
+		else if (set_var==1){
+		$(".DIODE .AMAX").css("background-color", "#fff");
+		$(".DIODE .VMIN").css("background-color", "yellow");
+		$(".DIODE .VMAX").css("background-color", "#fff");
+		$(".DIODE .VAK").css("background-color", "#fff");
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".DIODE .VMIN .nummin").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".DIODE .VMIN .nummin").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".DIODE .VMIN .nummin").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".DIODE .VMIN .nummin").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".DIODE .VMIN .nummin").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".DIODE .VMIN .nummin").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".DIODE .VMIN .nummin").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".DIODE .VMIN .nummin").html(num_vmin.toFixed(3));
+		}
+		//////////////////////////////////////////////////////////
+		}else if (set_var==2){
+		$(".DIODE .AMAX").css("background-color", "#fff");
+		$(".DIODE .VMIN").css("background-color", "#fff");
+		$(".DIODE .VMAX").css("background-color", "yellow");
+		$(".DIODE .VAK").css("background-color", "#fff");
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".DIODE .VMAX .nummax").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0.1) num_vmin=0.1;
+		$(".DIODE .VMAX .nummax").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".DIODE .VMAX .nummax").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0.1) num_vmin=0.1;
+		$(".DIODE .VMAX .nummax").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".DIODE .VMAX .nummax").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0.1) num_vmin=0.1;
+		$(".DIODE .VMAX .nummax").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".DIODE .VMAX .nummax").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0.1) num_vmin=0.1;
+		$(".DIODE .VMAX .nummax").html(num_vmin.toFixed(3));
+		}
+		///////////////////////////////////////////////////////////
+		}else if (set_var==3){
+		$(".DIODE .AMAX").css("background-color", "#fff");
+		$(".DIODE .VMIN").css("background-color", "#fff");
+		$(".DIODE .VMAX").css("background-color", "#fff");
+		$(".DIODE .VAK").css("background-color", "yellow");
+		if(encoderB == 1){
+		var num_vmin = parseInt($(".DIODE .VAK .num").eq(0).text());
+		num_vmin = num_vmin+100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".DIODE .VAK .num").html(num_vmin);
+		}
+		if(encoderB == -1){
+		var num_vmin = parseInt($(".DIODE .VAK .num").eq(0).text());
+		num_vmin = num_vmin-100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".DIODE .VAK .num").html(num_vmin);
+		}
+		if(encoderA == 1){
+		var num_vmin = parseInt($(".DIODE .VAK .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<1) num_vmin=1;
+		$(".DIODE .VAK .num").html(num_vmin);
+		}
+		if(encoderA == -1){
+		var num_vmin = parseInt($(".DIODE .VAK .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<1) num_vmin=1;
+		$(".DIODE .VAK .num").html(num_vmin);
+		}
+		}
+
+	if(SWA_E == 0){
+		$(".DIODE_M").css("background-color", "#fff");
+		$(".DIODE .AMAX").css("background-color", "#fff");
+		$(".DIODE .VMIN").css("background-color", "#fff");
+		$(".DIODE .VMAX").css("background-color", "#fff");
+		$(".DIODE .VAK").css("background-color", "#fff");
+		mode = 0;
+		set_var = 0;
+		}
+	 if(timebot>50){
+	 var mydata=new Array();
+	mydata.push(1);
+	mydata.push(parseFloat($(".DIODE .VMIN .nummin").eq(0).text())*1000);
+	mydata.push(parseFloat($(".DIODE .VMAX .nummax").eq(0).text())*1000);
+	mydata.push(parseFloat($(".DIODE .VAK .num").eq(0).text()));
+	mydata.push(parseFloat($(".DIODE .AMAX .num").eq(0).text())*1000);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+	mydata.push(0);
+
+	mqtt.send('RUN', JSON.stringify({data: mydata}), 0, false);
+  $(".pro1").html("กำลังประมวลผล");
+	timebot=0;
+	}
+	}
+	else if(mode == 2){
+		if(SWB_3 == 0){
+		set_var=set_var-1;
+		}
+		if(SWB_2 == 0){
+		set_var=set_var+1;
+		}
+		if(set_var>14)set_var=14;
+		if(set_var<0)set_var=0;
+		if(set_var==0){
+		{
+
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "yellow");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+
+		if(encoderB ==1){
+				//console.log(encoderB)
+				$('.NPN_PNP input').eq(1).click()
+				//$('.NPN_PNP input').eq(1).attr('checked')
+			}
+			else if(encoderB ==-1){
+				//console.log(encoderB)
+				//$('.NPN_PNP input').eq(0).attr('checked', false)
+				$('.NPN_PNP input').eq(0).click()
+			}
+		}
+		else if(set_var==1){
+		{ 													////สีเหลือง
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "yellow");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_AMAX = parseFloat($(".BJT .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.1;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".BJT .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_AMAX = parseFloat($(".BJT .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.1;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".BJT .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_AMAX = parseFloat($(".BJT .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.001;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".BJT .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_AMAX = parseFloat($(".BJT .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.001;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".BJT .AMAX .num").html(num_AMAX.toFixed(3));
+		}
+		}
+		else if(set_var==2){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "yellow");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VMIN .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VMIN .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VMIN .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VMIN .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		}
+		else if(set_var==3){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "yellow");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VMAX .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VMAX .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VMAX .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VMAX .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		}
+		else if(set_var==4){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "yellow");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseInt($(".BJT .VCE .num").eq(0).text());
+		num_vmin = num_vmin+100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".BJT .VCE .num").html(num_vmin);
+		}
+		if(encoderB == -1){
+		var num_vmin = parseInt($(".BJT .VCE .num").eq(0).text());
+		num_vmin = num_vmin-100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".BJT .VCE .num").html(num_vmin);
+		}
+		if(encoderA == 1){
+		var num_vmin = parseInt($(".BJT .VCE .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<1) num_vmin=1;
+		$(".BJT .VCE .num").html(num_vmin);
+		}
+		if(encoderA == -1){
+		var num_vmin = parseInt($(".BJT .VCE .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<1) num_vmin=1;
+		$(".BJT .VCE .num").html(num_vmin);
+		}
+		}
+		else if(set_var==5){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "yellow");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE1 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE1 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE1 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE1 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE1 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE1 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE1 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE1 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==6){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "yellow");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE2 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE2 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE2 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE2 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE2 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE2 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE2 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE2 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==7){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "yellow");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE3 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE3 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE3 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE3 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE3 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE3 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE3 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE3 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==8){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "yellow");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE4 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE4 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE4 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE4 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE4 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE4 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE4 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE4 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==9){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "yellow");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE5 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE5 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE5 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE5 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE5 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE5 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE5 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE5 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==10){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "yellow");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE6 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE6 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE6 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE6 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE6 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE6 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE6 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE6 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==11){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "yellow");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE7 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE7 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE7 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE7 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE7 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE7 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE7 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE7 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==12){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "yellow");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE8 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE8 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE8 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE8 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE8 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE8 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE8 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE8 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==13){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "yellow");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE9 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE9 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE9 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE9 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE9 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE9 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE9 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE9 .num").html(num_vmin.toFixed(2));
+		}
+		}
+		else if(set_var==14){
+		{ 													//
+		$(".BJT .BJT_M").css("background-color", "yellow");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "yellow");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".BJT .VBE10 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE10 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".BJT .VBE10 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE10 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".BJT .VBE10 .num").eq(0).text());
+		num_vmin = num_vmin+0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE10 .num").html(num_vmin.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".BJT .VBE10 .num").eq(0).text());
+		num_vmin = num_vmin-0.01;
+		if(num_vmin>1000) num_vmin=1000;
+		if(num_vmin<0) num_vmin=0;
+		$(".BJT .VBE10 .num").html(num_vmin.toFixed(2));
+		}
+		}
+
+	if(SWA_E == 0){
+		$(".BJT .BJT").css("background-color", "#fff");
+		$(".BJT .NPN_PNP").css("background-color", "#fff");
+		$(".BJT .AMAX").css("background-color", "#fff");
+		$(".BJT .VMIN").css("background-color", "#fff");
+		$(".BJT .VMAX").css("background-color", "#fff");
+		$(".BJT .VCE").css("background-color", "#fff");
+		$(".BJT .VBE1").css("background-color", "#fff");
+		$(".BJT .VBE2").css("background-color", "#fff");
+		$(".BJT .VBE3").css("background-color", "#fff");
+		$(".BJT .VBE4").css("background-color", "#fff");
+		$(".BJT .VBE5").css("background-color", "#fff");
+		$(".BJT .VBE6").css("background-color", "#fff");
+		$(".BJT .VBE7").css("background-color", "#fff");
+		$(".BJT .VBE8").css("background-color", "#fff");
+		$(".BJT .VBE9").css("background-color", "#fff");
+		$(".BJT .VBE10").css("background-color", "#fff");
+		mode = 0;
+		set_var = 0;
+		}
+	if(timebot>50){
+	 var mydata=new Array();
+	 var zxcv =0;
+	 if($('.NPN_PNP input').eq(1).is(":checked")==true){
+	 zxcv= 3;
+	 }else if($('.NPN_PNP input').eq(0).is(":checked")==true){
+	 zxcv= 2;
+	 }else{
+	 zxcv= 0;
+	 }
+
+	mydata.push(zxcv);
+	mydata.push(parseFloat($(".BJT .VMIN .num").eq(0).text())*1000);
+	mydata.push(parseFloat($(".BJT .VMAX .num").eq(0).text())*1000);
+	mydata.push(parseInt($(".BJT .VCE .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .AMAX .num").eq(0).text())*1000);
+	mydata.push(parseFloat($(".BJT .VBE1 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE2 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE3 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE4 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE5 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE6 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE7 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE8 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE9 .num").eq(0).text()));
+	mydata.push(parseFloat($(".BJT .VBE10 .num").eq(0).text()));
+
+	mqtt.send('RUN', JSON.stringify({data: mydata}), 0, false);
+  $(".pro1").html("กำลังประมวลผล");
+	timebot=0;
+	//onsole.log(JSON.stringify({data: mydata}));
+	}
+	}
+	else if(mode == 3){
+		if(SWB_3 == 0){
+		set_var=set_var-1;
+		}
+		if(SWB_2 == 0){
+		set_var=set_var+1;
+		}
+		if(set_var>13)set_var=13;
+		if(set_var<0)set_var=0;
+		if(set_var==0){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "yellow");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_AMAX = parseFloat($(".FET .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.1;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".FET .AMAX .num").html(num_AMAX.toFixed(2));
+		}
+		if(encoderB == -1){
+		var num_AMAX = parseFloat($(".FET .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.1;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".FET .AMAX .num").html(num_AMAX.toFixed(2));
+		}
+		if(encoderA == 1){
+		var num_AMAX = parseFloat($(".FET .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX+0.01;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".FET .AMAX .num").html(num_AMAX.toFixed(2));
+		}
+		if(encoderA == -1){
+		var num_AMAX = parseFloat($(".FET .AMAX .num").eq(0).text());
+		num_AMAX = num_AMAX-0.01;
+		if(num_AMAX>2.5) num_AMAX=2.5;
+		if(num_AMAX<0) num_AMAX=0;
+		$(".FET .AMAX .num").html(num_AMAX.toFixed(2));
+		}
+		}
+		else if(set_var==1){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "yellow");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VMIN .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VMIN .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VMIN .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VMIN .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMIN .num").html(num_vmin.toFixed(3));
+		}
+		}
+		else if(set_var==2){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "yellow");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VMAX .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VMAX .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VMAX .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VMAX .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>50) num_vmin=50;
+		if(num_vmin<-50) num_vmin=-50;
+		$(".FET .VMAX .num").html(num_vmin.toFixed(3));
+		}
+		}
+		else if(set_var==3){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "yellow");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseInt($(".FET .VDS .num").eq(0).text());
+		num_vmin = num_vmin+100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".FET .VDS .num").html(num_vmin);
+		}
+		if(encoderB == -1){
+		var num_vmin = parseInt($(".FET .VDS .num").eq(0).text());
+		num_vmin = num_vmin-100;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<100) num_vmin=100;
+		$(".FET .VDS .num").html(num_vmin);
+		}
+		if(encoderA == 1){
+		var num_vmin = parseInt($(".FET .VDS .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VDS .num").html(num_vmin);
+		}
+		if(encoderA == -1){
+		var num_vmin = parseInt($(".FET .VDS .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>5000) num_vmin=5000;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VDS .num").html(num_vmin);
+		}
+		}
+		else if(set_var==4){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "yellow");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS1 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS1 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS1 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS1 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS1 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS1 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS1 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS1 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==5){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "yellow");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS2 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS2 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS2 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS2 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS2 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS2 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS2 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS2 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==6){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "yellow");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS3 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS3 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS3 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS3 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS3 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS3 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS3 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS3 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==7){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "yellow");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS4 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS4 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS4 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS4 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS4 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS4 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS4 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS4 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==8){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "yellow");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS5 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS5 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS5 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS5 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS5 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS5 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS5 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS5 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==9){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "yellow");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS6 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS6 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS6 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS6 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS6 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS6 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS6 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS6 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==10){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "yellow");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS7 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS7 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS7 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS7 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS7 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS7 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS7 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS7 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==11){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "yellow");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS8 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS8 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS8 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS8 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS8 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS8 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS8 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS8 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==12){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "yellow");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS9 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS9 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS9 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS9 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS9 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS9 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS9 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS9 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		else if(set_var==13){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "yellow");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "yellow");
+		}
+		if(encoderB == 1){
+		var num_vmin = parseFloat($(".FET .VGS10 .num").eq(0).text());
+		num_vmin = num_vmin+1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS10 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderB == -1){
+		var num_vmin = parseFloat($(".FET .VGS10 .num").eq(0).text());
+		num_vmin = num_vmin-1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS10 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == 1){
+		var num_vmin = parseFloat($(".FET .VGS10 .num").eq(0).text());
+		num_vmin = num_vmin+0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS10 .num").html(num_vmin.toFixed(1));
+		}
+		if(encoderA == -1){
+		var num_vmin = parseFloat($(".FET .VGS10 .num").eq(0).text());
+		num_vmin = num_vmin-0.1;
+		if(num_vmin>30) num_vmin=30;
+		if(num_vmin<0) num_vmin=0;
+		$(".FET .VGS10 .num").html(num_vmin.toFixed(1));
+		}
+		}
+		if(SWA_E == 0){
+		{ 													//
+		$(".FET .FET_M").css("background-color", "#fff");
+		$(".FET .AMAX").css("background-color", "#fff");
+		$(".FET .VMIN").css("background-color", "#fff");
+		$(".FET .VMAX").css("background-color", "#fff");
+		$(".FET .VDS").css("background-color", "#fff");
+		$(".FET .VGS1").css("background-color", "#fff");
+		$(".FET .VGS2").css("background-color", "#fff");
+		$(".FET .VGS3").css("background-color", "#fff");
+		$(".FET .VGS4").css("background-color", "#fff");
+		$(".FET .VGS5").css("background-color", "#fff");
+		$(".FET .VGS6").css("background-color", "#fff");
+		$(".FET .VGS7").css("background-color", "#fff");
+		$(".FET .VGS8").css("background-color", "#fff");
+		$(".FET .VGS9").css("background-color", "#fff");
+		$(".FET .VGS10").css("background-color", "#fff");
+		}
+		mode = 0;
+		set_var = 0;
+		}
+		if(timebot>50){
+	 var mydata=new Array();
+	mydata.push(4);
+	mydata.push(parseFloat($(".FET .VMIN .num").eq(0).text())*1000);
+	mydata.push(parseFloat($(".FET .VMAX .num").eq(0).text())*1000);
+	mydata.push(parseInt($(".FET .VDS .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .AMAX .num").eq(0).text())*1000);
+	mydata.push(parseFloat($(".FET .VGS1 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS2 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS3 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS4 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS5 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS6 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS7 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS8 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS9 .num").eq(0).text()));
+	mydata.push(parseFloat($(".FET .VGS10 .num").eq(0).text()));
+
+	mqtt.send('RUN', JSON.stringify({data: mydata}), 0, false);
+	timebot=0;
+  $(".pro1").html("กำลังประมวลผล");
+	//console.log(JSON.stringify({data: mydata}));
+	}
+}else if (mode == 4) {
+  if(encoderB == 1){
+  num_poy= num_poy+1;
+  if(num_poy>MAXnum_poy)num_poy=MAXnum_poy;
+  }
+  if(encoderB == -1){
+  num_poy= num_poy-1;
+  if (num_poy<0)num_poy = 0;
+  }
+  if(encoderA == 1){
+  num_pox = num_pox+1;
+  if(num_pox> $('.ct-point').length) num_pox=$('.ct-point').length-1;
+    $point = $('.ct-point').eq(num_pox)
+    __value = $point.attr('ct:value')
+    __name = $point.closest('.ct-series').attr('ct:series-name'),
+    $tooltip.text(__name + ": " + __value)
+    $tooltip.css({
+      left: parseInt($point.attr('x1')),
+      top: parseInt($point.attr('y1'))
+    })
+
+
+  }
+  if(encoderA == -1){
+  num_pox = num_pox-1;
+  if(num_pox<0)num_pox = 0;
+  $point = $('.ct-point').eq(num_pox)
+  __value = $point.attr('ct:value')
+  __name = $point.closest('.ct-series').attr('ct:series-name'),
+  $tooltip.text(__name + ": " + __value)
+  $tooltip.css({
+    left: parseInt($point.attr('x1')),
+    top: parseInt($point.attr('y1'))
+  })
+  }
+  if(SWB_E == 0){
+    mode = 0;
+    $(".pro1").html("พร้อมใช้งาน");
+  }
+}
+ if(SWB_4==0){
+ timebot=timebot+1;
+ }else{
+ timebot = 0;
+ }
+ if(timebot>2){
+
+	//myObj.push("555");
+	//mydata.push(parseFloat($(".DIODE .AMAX .num").eq(0).text()));
+	//var message = new Paho.MQTT.Message(myObj);
+	//message.destinationName = 'RUN';
+	//message.qos = 2;
+	//console.log(myObj);
+	//mqtt.send(message);
+	//timebot=0;
+	}
+ }, 120);
+function DIODE() {
+    $(document).ready(function(){
+    $(".BJT").hide();
+	$(".DIODE").show();
+	$(".FET").hide();
+
+});
+}
+function FET() {
+    $(document).ready(function(){
+    $(".BJT").hide();
+	$(".DIODE").hide();
+	$(".FET").show();
+
+});
+}
+/*setInterval(function(){
+	var num_int = parseInt($(".BJT .numVBE .num").eq(0).text());
+	var numvgs_int = parseInt($(".FET .numVGS .num").eq(0).text());
+	if(num_int==1){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").hide();
+		$(".BJT .VBE3").hide();
+		$(".BJT .VBE4").hide();
+		$(".BJT .VBE5").hide();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==2){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").hide();
+		$(".BJT .VBE4").hide();
+		$(".BJT .VBE5").hide();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==3){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").hide();
+		$(".BJT .VBE5").hide();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==4){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").hide();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==5){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==6){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").show();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==7){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").show();
+		$(".BJT .VBE7").show();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==8){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").show();
+		$(".BJT .VBE7").show();
+		$(".BJT .VBE8").show();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==9){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").show();
+		$(".BJT .VBE7").show();
+		$(".BJT .VBE8").show();
+		$(".BJT .VBE9").show();
+		$(".BJT .VBE10").hide();
+	}else if (num_int==10){
+		$(".BJT .VBE1").show();
+		$(".BJT .VBE2").show();
+		$(".BJT .VBE3").show();
+		$(".BJT .VBE4").show();
+		$(".BJT .VBE5").show();
+		$(".BJT .VBE6").show();
+		$(".BJT .VBE7").show();
+		$(".BJT .VBE8").show();
+		$(".BJT .VBE9").show();
+		$(".BJT .VBE10").show();
+	}else {
+		$(".BJT .VBE1").hide();
+		$(".BJT .VBE2").hide();
+		$(".BJT .VBE3").hide();
+		$(".BJT .VBE4").hide();
+		$(".BJT .VBE5").hide();
+		$(".BJT .VBE6").hide();
+		$(".BJT .VBE7").hide();
+		$(".BJT .VBE8").hide();
+		$(".BJT .VBE9").hide();
+		$(".BJT .VBE10").hide();
+	}
+	if(numvgs_int==1){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").hide();
+		$(".FET .VGS3").hide();
+		$(".FET .VGS4").hide();
+		$(".FET .VGS5").hide();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==2){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").hide();
+		$(".FET .VGS4").hide();
+		$(".FET .VGS5").hide();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==3){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").hide();
+		$(".FET .VGS5").hide();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==4){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").hide();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==5){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==6){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").show();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==7){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").show();
+		$(".FET .VGS7").show();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==8){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").show();
+		$(".FET .VGS7").show();
+		$(".FET .VGS8").show();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==9){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").show();
+		$(".FET .VGS7").show();
+		$(".FET .VGS8").show();
+		$(".FET .VGS9").show();
+		$(".FET .VGS10").hide();
+	}else if (numvgs_int==10){
+		$(".FET .VGS1").show();
+		$(".FET .VGS2").show();
+		$(".FET .VGS3").show();
+		$(".FET .VGS4").show();
+		$(".FET .VGS5").show();
+		$(".FET .VGS6").show();
+		$(".FET .VGS7").show();
+		$(".FET .VGS8").show();
+		$(".FET .VGS9").show();
+		$(".FET .VGS10").show();
+	}else {
+		$(".FET .VGS1").hide();
+		$(".FET .VGS2").hide();
+		$(".FET .VGS3").hide();
+		$(".FET .VGS4").hide();
+		$(".FET .VGS5").hide();
+		$(".FET .VGS6").hide();
+		$(".FET .VGS7").hide();
+		$(".FET .VGS8").hide();
+		$(".FET .VGS9").hide();
+		$(".FET .VGS10").hide();
+	}
+	;
+}, 200);
+*/
+
+
+
+</script>
+
+  <script src="js/chartist.min.js" type="text/javascript"></script>
+  <link href="js/chartist.min.css" rel="stylesheet" type="text/css" >
+  <link href='http://fonts.googleapis.com/css?family=Oxygen:300' rel='stylesheet' type='text/css'>
+
+<style>
+
+</style>
+</head>
+<body>
+
+<div class="img111">
+<img src="logo1.jpg" alt="Mountain View" style="width:1024px;height:600px;">
+</div>
+
+<div class="img222" style="display: none;">
+<img src="logo2.jpg" alt="Mountain View" style="width:1024px;height:600px;">
+</div>
+<script>
+  setTimeout(function() {
+    $(".img111").hide();
+      $(".img222").fadeIn();
+    setTimeout(function() {
+      $(".img222").fadeOut();
+      $(".modeRUN").fadeIn();
+    }, 5000);
+  }, 15000);
+
+</script>
+<div style="display: none;"   class="modeRUN">
+
+<table width="1024" height="600" border="0">
+
+  <tr>
+    <td width="800" height="50">
+
+      <div class="row">
+        <div class="col-sm-1">
+        </div>
+        <div class="col-sm-6">
+          <span class="alert alert-success">เริ่มทดสอบ</span>
+          <span class="alert alert-info">เลื่อนขึ้น</span>
+          <span class="alert alert-warning">เลื่อนลง</span>
+          <span class="alert alert-danger">ปิดเครื่อง</span>
+        </div>
+
+        <div class="col-sm-5">
+          <div class="text-left">
+            <strong><span class="alert alert-info">สถานะ : </span></strong>
+            <strong><span class="alert alert-danger">. . . . .<span class ="pro1">พร้อมทำงาน</span>. . . . .</span></strong>
+          </div>
+        </div>
+      </div>
+
+    </td>
+    <td width="224" height="600" rowspan="3" align="left" valign="top">
+
+	<div class="panel panel-primary">
+	<div class="panel-heading">
+		<div class = "type_n">
+  			<form role="form">
+   				<label class="radio-inline">
+      				<input type="radio" onclick="DIODE()" name="optradio">DIODE
+   				<label class="radio-inline">
+      				<input type="radio" onclick="BJT()" name="optradio">BJT
+    			</label>
+    			<label class="radio-inline">
+      				<input type="radio" onclick="FET()" name="optradio">FET
+   				</label>
+  			</form>
+		</div>
+	</div>
+	</div>
+
+		<div class="BJT">
+      <div class="panel panel-primary">
+  			<div class="panel-heading"><class ="BJT_M">Bipolar Junction Transistor</div>
+
+  <div class="alert-danger">
+    <div class = "NPN_PNP">
+			<form role="form2" id = "form2"><span>เลือกชนิด</span>
+   				<label class="radio-inline">
+      				<input type="radio" name="optradio">NPN
+   				</label>
+   				<label class="radio-inline">
+      				<input type="radio" name="optradio">PNP
+    			</label>
+  		</form>
+		</div>
+  </div>
+
+    <div class="alert bg-warning">
+    	<p class="AMAX">Ic : สูงสุด = <span class ="num">1.0</span>A</p>
+			<p class="VMIN">Vce : เริ่มต้น = <span class ="num">0.000</span>V</p>
+			<p class="VMAX">Vce : สูงสุด = <span class ="num">0.000</span>V</p>
+			<p class="VCE">ความละเอียด = <span class ="num">100</span>mV</p>
+
+    <table class="table">
+        <tbody>
+          <div class="panel-heading"><strong><class ="FET_M">กระแส IB : (mA)</strong></div>
+          <tr>
+            <td><p class="VBE1">1 : <span class ="num">0.00</span></p></td>
+            <td><p class="VBE2">2 : <span class ="num">0.00</span></p></td>
+          </tr>
+          <tr>
+            <td><p class="VBE3">3 : <span class ="num">0.00</span></p></td>
+            <td><p class="VBE4">4 : <span class ="num">0.00</span></p></td>
+          </tr>
+          <tr>
+            <td><p class="VBE5">5 : <span class ="num">0.00</span></p></td>
+            <td><p class="VBE6">6 : <span class ="num">0.00</span></p></td>
+          </tr>
+          <tr>
+            <td><p class="VBE7">7 : <span class ="num">0.00</span></p></td>
+            <td><p class="VBE8">8 : <span class ="num">0.00</span></p></td>
+          </tr>
+          <tr>
+            <td><p class="VBE9">9 : <span class ="num">0.00</span></p></td>
+            <td><p class="VBE10">10 : <span class ="num">0.00</span></p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  </div>
+
+
+	<div class ="DIODE">
+		<div class="panel panel-primary">
+			<div class="panel-heading"><strong><class ="DIODE_M">DIODE</div></strong>
+
+
+
+				<div class="panel-body">
+					<div class="panel panel-default">
+						<div class="panel-heading"><p class="AMAX">Id : สูงสุด = <span class ="num">1.0</span>A</p></div>
+						<div class="panel-body"><p class="VMIN">Vd : เริ่มต้น = <span class ="nummin">0.000</span>V</p></div>
+						<div class="panel-heading"><p class="VMAX">Vd : สูงสุด = <span class ="nummax">1.000</span>V</p></div>
+						<div class="panel-body"><p class="VAK">ความละเอียด = <span class ="num">100</span>mV</p></div>
+					</div>
+				</div>
+		</div>
+	</div>
+
+
+
+		<div class="FET">
+      <div class="panel panel-primary">
+        <div class="panel-heading"><strong><class ="FET_M">Field Effect Transistor</strong></div>
+          <div class="alert bg-warning">
+            <p class="AMAX">Id : สูงสุด = <span class ="num">1.0</span>A</p>
+			       <p class="VMIN">Vds : เริ่มต้น= <span class ="num">0.0</span>V</p>
+			       <p class="VMAX">Vds : สูงสุด = <span class ="num">0.0</span>V</p>
+			       <p class="VDS">ความละเอียด = <span class ="num">100</span>mV</p>
+          <!-- </div>
+
+        <div class="alert bg-warning"> -->
+
+            <table class="table">
+              <tbody>
+                <div class="panel-heading"><strong><class ="FET_M">แรงดัน Vg : (V)</strong></div>
+                <tr>
+                  <td><p class="VGS1"> 1 : <span class ="num">0.00</span></p></td>
+                  <td><p class="VGS2"> 2 : <span class ="num">0.00</span></p></td>
+                </tr>
+                <tr>
+                  <td><p class="VGS3"> 3 : <span class ="num">0.00</span></p></td>
+                  <td><p class="VGS4"> 4 : <span class ="num">0.00</span></p></td>
+                </tr>
+                <tr>
+                  <td><p class="VGS5"> 5 : <span class ="num">0.00</span></p></td>
+                  <td><p class="VGS6"> 6 : <span class ="num">0.00</span></p></td>
+                </tr>
+                <tr>
+                  <td><p class="VGS7"> 7 : <span class ="num">0.00</span></p></td>
+                  <td><p class="VGS8"> 8 : <span class ="num">0.00</span></p></td>
+                </tr>
+                <tr>
+                  <td><p class="VGS9"> 9 : <span class ="num">0.00</span></p></td>
+                  <td><p class="VGS10"> 10 : <span class ="num">0.00</span></p></td>
+                </tr>
+              </tbody>
+            </table>
+        </div>
+    </div>
+		</div>
+
+
+		<div class="OPC">
+
+      <!-- <div class="panel panel-default">
+        <div class="panel-body"><p class="Pro">กำลังประมวลผล</p></div>
+
+      </div> -->
+
+
+
+      <!-- <div class="panel panel-default">
+        <div class="panel-body">
+          <p class="off">ปิดเครื่อง</p>
+        </div>
+      </div> -->
+
+
+
+		</div>
+    </td>
+  </tr>
+
+  <tr style="width: 700px; height: 500px;">
+    <td width: "700px"; height: "500px;">
+	<div style="width: 700px; height: 500px;">
+		<div class="ct-chart ct-golden-section"></div>
+    <div>55</div>
+	</div>
+
+	</td>
+  </tr>
+  <tr>
+
+    <td width="800" height="50">
+
+
+
+          <div class="text-center">
+            <h4><span class="alert bg-warning">เทคนิคการวัดคุณสมบัติเฉพาะตัวของอุปกรณ์สารกึ่งตัวนำ ผ่านการประมวลผลด้วยไมโครคอนโทรลเลอร์</span></h4>
+          </div>
+
+
+
+
+    </td>
+
+  </tr>
+</table>
+</div>
+</body>
+<script>
+$(document).ready(function() {
+	window.chart = new Chartist.Line('.ct-chart', {
+	  low: 0,
+	  axisX: {
+		offset: 25,
+		labelOffset: {
+		  y: 10
+		}
+	  },
+	  axisY: {
+		offset: 35,
+		labelOffset: {
+		  x: -10,
+		  y: 3
+		}
+	  }
+	});
+});
+$tooltip = $('<div class="tooltip"></div>')
+$tooltip.appendTo($('.ct-chart'));
+
+$(document).on('mouseenter', '.ct-point', function() {
+  var seriesName = $(this).closest('.ct-series').attr('ct:series-name'),
+      value = $(this).attr('ct:value');
+
+  $tooltip.text(seriesName + ': ' + value);
+  //$tooltip.removeClass('tooltip-hidden');
+});
+
+$(document).on('mouseleave', '.ct-point', function() {
+  //$tooltip.addClass('tooltip-hidden');
+});
+
+$(document).on('mousemove', '.ct-point', function(event) {
+
+  // $tooltip.css({
+  //   left: (event.offsetX || event.originalEvent.layerX) - $tooltip.width() / 2,
+  //   top: (event.offsetY || event.originalEvent.layerY) - $tooltip.height() - 20
+  // });
+});
+</script>
+</html>
